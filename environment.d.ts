@@ -5,9 +5,9 @@ declare global {
     interface ProcessEnv {
       API_ID: number;
       API_HASH: string;
-      TARGET_CHAT: string;
+      TARGET_CHATS: string;
       TRACKED_CHATS: string;
-      ONLY_USERNAME: string;
+      FILTER_USERNAMES: string;
       ENABLE_SOUND: number;
     }
   }

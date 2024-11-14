@@ -16,24 +16,50 @@ const alertPath = path.join(__dirname, "alert.wav");
 
 const enableSound = Number(process.env.ENABLE_SOUND) === 1;
 
-// load db into memory
-await db.read();
-
 // solana, trx, evm
-const regexRegistry = {
-  evm: /0x[a-fA-F0-9]{40}/,
-  tron: /T[A-Za-z1-9]{33}/,
-  solana: /[1-9A-HJ-NP-Za-z]{32,44}/, // lowercase l is only included as dex links are lowercased
+const regexRegistry = Object.entries({
+  evm: /(?:^[a-zA-Z\d])?0x[a-fA-F0-9]{40}/,
+  tron: /(?:^[a-zA-Z\d])?T[A-Za-z1-9]{33}/,
+  solana: /(?:^[a-zA-Z\d])?[1-9A-HJ-NP-Za-z]{32,44}/, // lowercase l is only included as dex links are lowercased
+});
+
+// parse tracked chats
+const trackedChats = process.env.TRACKED_CHATS.split(",")
+  .map((chat) => chat.trim())
+  .map((chat) => (/^-?\d+$/.test(chat) ? parseInt(chat) : chat))
+  .filter(Boolean);
+
+// parse target chats
+const targetChats = process.env.TARGET_CHATS.split(",")
+  .map((chat) => chat.trim())
+  .map((chat) => (/^-?\d+$/.test(chat) ? parseInt(chat) : chat))
+  .filter(Boolean);
+
+// parse filter usernames
+const filterUsernames = process.env.FILTER_USERNAMES.split(",")
+  .map((username) => username.trim())
+  .filter(Boolean);
+
+// concurrent forwarder
+const processMatch = (chat: Api.Chat, sender: Api.User, chain: string, address: string) => {
+  client.logger.info(
+    `Found ${chain} match in ${chat.title} from ${getDisplayName(sender)}: ${address}`
+  );
+
+  enableSound && sound.play(alertPath);
+  client.logger.info(`Sending ${address} to target chat(s)...`);
+
+  return Promise.all(
+    targetChats.map((targetChat) =>
+      client.sendMessage(targetChat, { message: address }).then((msg) => {
+        client.logger.info(`${address} sent to ${targetChat}`);
+      })
+    )
+  );
 };
 
-// parse target chat
-const targetChat = (() => {
-  const chat = process.env.TARGET_CHAT.trim();
-  if (!chat) {
-    throw new Error("TARGET_CHAT is required");
-  }
-  return /^-?\d+$/.test(chat) ? parseInt(chat) : chat;
-})();
+// load db into memory
+await db.read();
 
 // start listening to messages in tracked chats
 client.addEventHandler(
@@ -43,64 +69,70 @@ client.addEventHandler(
       ?.filter((entity) => entity instanceof Api.MessageEntityTextUrl)
       .map((entity) => entity.url);
 
-    if (process.env.ONLY_USERNAME) {
-      if (text.match(new RegExp(process.env.ONLY_USERNAME, "i")) === null) {
-        return;
-      }
+    if (filterUsernames.length > 0) {
+      let found: string | false = false;
 
-      client.logger.info(`${process.env.ONLY_USERNAME} match found`);
-    }
-
-    const matchers = Object.entries(regexRegistry);
-
-    for (let i = 0; i < matchers.length; i++) {
-      let match = text.match(matchers[i][1]);
-
-      // if no text match, check URLs
-      if (!match) {
-        for (const url of urls || []) {
-          match = url.match(matchers[i][1]);
-          if (match) {
-            break;
-          }
+      for (const username of filterUsernames) {
+        if (text.match(new RegExp(username, "i")) !== null) {
+          found = username;
+          break;
         }
       }
 
+      if (!found) {
+        return;
+      }
+
+      client.logger.info(`${found} match found`);
+    }
+
+    let found = false;
+
+    for (let i = 0; i < regexRegistry.length; i++) {
+      let match = text.match(regexRegistry[i][1]);
+
       if (match) {
         const [address] = match;
+        const [chat, sender] = await Promise.all([message.getChat(), message.getSender()]);
 
-        const lcAddress = address.toLowerCase();
-        const chat = (await message.getChat()) as Api.Chat;
-        const sender = (await message.getSender()) as Api.User;
+        found = true;
 
-        client.logger.info(
-          `Found ${matchers[i][0]} match in ${chat.title} from ${getDisplayName(
-            sender
-          )}: ${address}`
-        );
-
-        if (db.data.scanned.indexOf(lcAddress) > -1) {
-          client.logger.info(`${address} is a duplicate! Ignoring...`);
-        } else {
-          enableSound && sound.play(alertPath);
-          db.data.scanned.push(lcAddress);
-          client.logger.info(`Sending ${address} to sniper...`);
-          // send ca to target
-          await client.sendMessage(targetChat, {
-            message: address,
-          });
-          client.logger.info(`${address} sent!`);
-          await db.write();
+        if (chat && sender) {
+          processMatch(chat as Api.Chat, sender as Api.User, regexRegistry[i][0], address);
         }
 
         break;
       }
     }
+
+    // match wasn't found in text, lets try the urls
+    if (!found) {
+      for (let i = 0; i < regexRegistry.length; i++) {
+        for (const url of urls || []) {
+          const match = url.match(regexRegistry[i][1]);
+
+          if (match) {
+            const [address] = match;
+            const [chat, sender] = await Promise.all([message.getChat(), message.getSender()]);
+
+            found = true;
+
+            if (chat && sender) {
+              processMatch(chat as Api.Chat, sender as Api.User, regexRegistry[i][0], address);
+            }
+
+            break;
+          }
+        }
+
+        if (found) {
+          break;
+        }
+      }
+    }
   },
   new NewMessage({
-    chats: process.env.TRACKED_CHATS.split(",")
-      .map((chat) => chat.trim())
-      .map((chat) => (/^-?\d+$/.test(chat) ? parseInt(chat) : chat)),
+    chats: trackedChats,
   })
 );
 
