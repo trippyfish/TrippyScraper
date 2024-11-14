@@ -4,7 +4,6 @@ import path from "path";
 import sound from "sound-play";
 import { NewMessage } from "telegram/events/NewMessage.js";
 import { Api } from "telegram/index.js";
-import { getDisplayName } from "telegram/Utils.js";
 import { fileURLToPath } from "url";
 
 import client from "./utils/client.js";
@@ -42,19 +41,28 @@ const filterUsernames = process.env.FILTER_USERNAMES.split(",")
   .filter(Boolean);
 
 // concurrent forwarder
-const processMatch = (chain: string, address: string) => {
+const processMatch = async (chain: string, address: string) => {
   client.logger.info(`Found ${chain} match: ${address}`);
 
-  enableSound && sound.play(alertPath);
-  client.logger.info(`Sending ${address} to target chat(s)...`);
+  const lcAddress = address.toLowerCase();
 
-  return Promise.all(
-    targetChats.map((targetChat) =>
-      client.sendMessage(targetChat, { message: address }).then((msg) => {
-        client.logger.info(`${address} sent to ${targetChat}`);
-      })
-    )
-  );
+  if (db.data.scanned.indexOf(lcAddress) > -1) {
+    client.logger.info(`${address} is a duplicate! Ignoring...`);
+    return Promise.resolve([]);
+  } else {
+    enableSound && sound.play(alertPath);
+    db.data.scanned.push(lcAddress);
+    client.logger.info(`Sending ${address} to target chat(s)...`);
+
+    return Promise.all(
+      targetChats.map((targetChat) =>
+        client.sendMessage(targetChat, { message: address }).then((msg) => {
+          client.logger.info(`${address} sent to ${targetChat}`);
+          return msg;
+        })
+      )
+    ).then(() => db.write());
+  }
 };
 
 // load db into memory
