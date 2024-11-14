@@ -19,9 +19,9 @@ const enableSound = Number(process.env.ENABLE_SOUND) === 1;
 
 // solana, trx, evm
 const regexRegistry = Object.entries({
-  evm: /(?:^[a-zA-Z\d])?0x[a-fA-F0-9]{40}/,
-  tron: /(?:^[a-zA-Z\d])?T[A-Za-z1-9]{33}/,
-  solana: /(?:^[a-zA-Z\d])?[1-9A-HJ-NP-Za-z]{32,44}/, // lowercase l is only included as dex links are lowercased
+  evm: /\b0x[a-fA-F0-9]{40}\b/,
+  tron: /\bT[A-Za-z1-9]{33}\b/,
+  solana: /\b[1-9A-HJ-NP-Za-z]{32,44}\b/, // lowercase l is only included as dex links are lowercased
 });
 
 // parse tracked chats
