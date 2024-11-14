@@ -42,10 +42,8 @@ const filterUsernames = process.env.FILTER_USERNAMES.split(",")
   .filter(Boolean);
 
 // concurrent forwarder
-const processMatch = (chat: Api.Chat, sender: Api.User, chain: string, address: string) => {
-  client.logger.info(
-    `Found ${chain} match in ${chat.title} from ${getDisplayName(sender)}: ${address}`
-  );
+const processMatch = (chain: string, address: string) => {
+  client.logger.info(`Found ${chain} match: ${address}`);
 
   enableSound && sound.play(alertPath);
   client.logger.info(`Sending ${address} to target chat(s)...`);
@@ -95,15 +93,8 @@ client.addEventHandler(
       let match = text.match(regexRegistry[i][1]);
 
       if (match) {
-        const [address] = match;
-        const [chat, sender] = await Promise.all([message.getChat(), message.getSender()]);
-
+        processMatch(regexRegistry[i][0], match[0]);
         found = true;
-
-        if (chat && sender) {
-          processMatch(chat as Api.Chat, sender as Api.User, regexRegistry[i][0], address);
-        }
-
         break;
       }
     }
@@ -115,15 +106,8 @@ client.addEventHandler(
           const match = url.match(regexRegistry[i][1]);
 
           if (match) {
-            const [address] = match;
-            const [chat, sender] = await Promise.all([message.getChat(), message.getSender()]);
-
+            processMatch(regexRegistry[i][0], match[0]);
             found = true;
-
-            if (chat && sender) {
-              processMatch(chat as Api.Chat, sender as Api.User, regexRegistry[i][0], address);
-            }
-
             break;
           }
         }
