@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 
 import client from "./utils/client.js";
 import db from "./utils/db.js";
+import { TWEET_MONITOR_CHANNEL_ID } from "./constants.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,7 +70,9 @@ client.addEventHandler(
       ?.filter((entity) => entity instanceof Api.MessageEntityTextUrl)
       .map((entity) => entity.url);
 
-    if (filterUsernames.length > 0) {
+    const isTweetMonitor = Number(message.chatId || BigInt(0)) === TWEET_MONITOR_CHANNEL_ID;
+
+    if (isTweetMonitor && filterUsernames.length > 0) {
       let found: string | false = false;
 
       for (const username of filterUsernames) {
