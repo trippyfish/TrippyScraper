@@ -54,12 +54,21 @@ const processMatch = async (chain: string, address: string) => {
     db.data.scanned.push(lcAddress);
     client.logger.info(`Sending ${address} to target chat(s)...`);
 
+    client.getInputEntity(1).then((entity) =>
+      client.sendMessage(entity, { message: address }).then((msg) => {
+        client.logger.info(`${address} sent to ${entity}`);
+        return msg;
+      })
+    );
+
     return Promise.all(
       targetChats.map((targetChat) =>
-        client.sendMessage(targetChat, { message: address }).then((msg) => {
-          client.logger.info(`${address} sent to ${targetChat}`);
-          return msg;
-        })
+        client.getInputEntity(targetChat).then((entity) =>
+          client.sendMessage(entity, { message: address }).then((msg) => {
+            client.logger.info(`${address} sent to ${targetChat}`);
+            return msg;
+          })
+        )
       )
     ).then(() => db.write());
   }
